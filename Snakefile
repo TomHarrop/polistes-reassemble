@@ -17,7 +17,7 @@ def meraculous_input_resolver(wildcards):
     elif my_readset == 'raw':
         std_path = 'output/010_trim-decon/{library}.fq.gz'
     # mp libs are always the same
-    mp_path = 'output/030_split/{library}-lmp.fq.gz'
+    mp_path = 'output/010_trim-decon/{library}.fq.gz'
     lib_dict = dict.fromkeys(all_libs)
     # generate paths from keys
     for key in lib_dict:
@@ -49,6 +49,8 @@ meraculous_config_file = 'src/meraculous_config.txt'
 
 sra_container = 'shub://TomHarrop/singularity-containers:sra_2.9.2'
 bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
+mer_container = 'shub://TomHarrop/singularity-containers:meraculous_2.2.6'
+
 
 ########
 # MAIN #
@@ -92,6 +94,19 @@ with open(meraculous_config_file, 'rt') as f:
 # format using
 # meraculous_config_string.format(**lib_dict)
 
+# fix the headers (do during trim-decon)
+# zcat 1kb_standard_insert.fq.gz \
+#     | head -n 16 \
+#     | sed -e 's/^@\S*\s/@/g' \
+#     | reformat.sh \
+#         in=stdin.fastq \
+#         int=t \
+#         out=stdout.fastq \
+#         addcolon=t \
+#         trimreaddescription=t \
+#     | sed -e 's/$/N:0:NNNNNN/g'
+
+
  
 #########
 # RULES #
@@ -99,36 +114,48 @@ with open(meraculous_config_file, 'rt') as f:
 
 rule target:
     input:
-        expand('output/010_trim-decon/{library}.fq.gz',
-               library=list(name_to_srr.keys())),
-        expand('output/020_norm/{library}-norm.fq.gz',
-               library=standard_libs),
-        expand('output/030_split/{library}-lmp.fq.gz',
-               library=mate_pair_libs),
         expand(('output/040_meraculous/'
                 '{read_set}_k{k}_diplo{diplo}/'
                 'meraculous_final_results/final.scaffolds.fa'),
                read_set=['norm', 'raw'],
-               k=[31, 61, 91],
+               k=[35], # , 61, 91], # have to disable MP libraries for k>35
                diplo=['0', '1'])
 
 # assembly rule
 rule meraculous:
     input:
-        unpack(meraculous_input_resolver)
-    output:
+        unpack(meraculous_input_resolver),
         config = ('output/040_meraculous/'
-                  '{read_set}_k{k}_diplo{diplo}/config.txt'),
+                  '{read_set}_k{k}_diplo{diplo}/config.txt')
+    output:
         contigs = ('output/040_meraculous/'
                    '{read_set}_k{k}_diplo{diplo}/'
                    'meraculous_final_results/final.scaffolds.fa'),
     params:
         outdir = 'output/040_meraculous/{read_set}_k{k}_diplo{diplo}/',
-        dmin = '0'
     threads:
         multiprocessing.cpu_count()
     log:
         'output/logs/040_meraculous/{read_set}_k{k}_diplo{diplo}.log'
+    singularity:
+        mer_container
+    shell:
+        'run_meraculous.sh '
+        '-dir {params.outdir} '
+        '-config {input.config} '
+        '-cleanup_level 2 '
+        '&> {log}'
+
+rule meraculous_config:
+    input:
+        unpack(meraculous_input_resolver)
+    output:
+        config = ('output/040_meraculous/'
+                  '{read_set}_k{k}_diplo{diplo}/config.txt')
+    params:
+        dmin = '0'
+    threads:
+        multiprocessing.cpu_count()
     run:
         my_lib_dict = meraculous_input_resolver(wildcards)
         # fill in full paths
@@ -141,12 +168,6 @@ rule meraculous:
         my_conf = meraculous_config_string.format(**my_lib_dict)
         with open(output.config, 'wt') as f:
             f.write(my_conf)
-        shell(
-            'run_meraculous.sh '
-            '-dir {params.outdir} '
-            '-config {output.config} '
-            '-cleanup_level 2 '
-            '&> {log}')
 
 # split nextera for the mate pair libs
 rule split_nextera:
@@ -217,7 +238,8 @@ rule trim_decon:
         t_stats = 'output/010_trim-decon/{library}_trim-stats.txt'
     log:
         filter = 'output/logs/010_trim-decon/{library}-filter.log',  
-        trim = 'output/logs/010_trim-decon/{library}-trim.log'
+        trim = 'output/logs/010_trim-decon/{library}-trim.log',
+        reheader = 'output/logs/010_trim-decon/{library}-reheader.log'
     params:
         filter = '/phix174_ill.ref.fa.gz',
         trim = '/adapters.fa'
@@ -226,10 +248,28 @@ rule trim_decon:
     singularity:
         bbduk_container
     shell:
-        'bbduk.sh '
-        'threads={threads} '
+        'reformat.sh '
         'in={input.r1} '
         'in2={input.r2} '
+        'out=stdout.fastq '
+        '2> {log.reheader} '
+        '| '
+        'sed -e \'s/^@\S*\s/@/g\' '          # remove SRA from fastq header
+        '| '
+        'reformat.sh '
+        'in=stdin.fastq '
+        'int=t '
+        'out=stdout.fastq '
+        'addcolon=t '
+        'trimreaddescription=t '
+        '2>> {log.reheader} '
+        '| '
+        'sed -e \'s/$/N:0:NNNNNN/g\' '      # add second word to fastq header
+        '| '
+        'bbduk.sh '
+        'threads={threads} '
+        'in=stdin.fastq '
+        'int=t '
         'out=stdout.fastq '
         'ref={params.filter} '
         'hdist=1 '
