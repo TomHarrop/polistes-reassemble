@@ -95,7 +95,10 @@ with open(meraculous_config_file, 'rt') as f:
 # meraculous_config_string.format(**lib_dict)
 
 # fix the headers (do during trim-decon)
-# zcat 1kb_standard_insert.fq.gz \
+# reformat.sh \
+# in=SRR1393722_1.fastq.gz \
+# in2=SRR1393722_2.fastq.gz \
+# out=stdout.fastq \
 #     | head -n 16 \
 #     | sed -e 's/^@\S*\s/@/g' \
 #     | reformat.sh \
@@ -104,7 +107,7 @@ with open(meraculous_config_file, 'rt') as f:
 #         out=stdout.fastq \
 #         addcolon=t \
 #         trimreaddescription=t \
-#     | sed -e 's/$/N:0:NNNNNN/g'
+#     | sed -e '/^@\S\+:/s/$/N:0:NNNNNN/g'
 
 
  
@@ -264,7 +267,7 @@ rule trim_decon:
         'trimreaddescription=t '
         '2>> {log.reheader} '
         '| '
-        'sed -e \'s/$/N:0:NNNNNN/g\' '      # add second word to fastq header
+        'sed -e \'/^@\S\+:/s/$/N:0:NNNNNN/g\' '      # add second word to fastq header
         '| '
         'bbduk.sh '
         'threads={threads} '
