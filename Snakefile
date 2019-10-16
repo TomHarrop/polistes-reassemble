@@ -104,8 +104,6 @@ with open(meraculous_config_file, 'rt') as f:
 #         addcolon=t \
 #         trimreaddescription=t \
 #     | sed -e '/^@\S\+\s\+[12]/s/$/N:0:NNNNNN/g'
-
-
  
 #########
 # RULES #
@@ -285,18 +283,6 @@ rule trim_decon:
         'forcetrimmod=5 '
         'stats={output.t_stats} '
         '2> {log.trim} '
-
-
-reformat.sh in=SRR1393722_1.fastq.gz in2=SRR1393722_2.fastq.gz out=stdout.fastq    \
-    | sed -e 's/^@.\+sra\S\+\s\+/@/g' \
-    | reformat.sh \
-        in=stdin.fastq \
-        int=t \
-        out=stdout.fastq \
-        addcolon=t \
-        trimreaddescription=t \
-    | sed -e '/^@\S\+\s\+[12]/s/$/N:0:NNNNNN/g'
-
 
 rule repair:
     input:
