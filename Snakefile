@@ -95,19 +95,15 @@ with open(meraculous_config_file, 'rt') as f:
 # meraculous_config_string.format(**lib_dict)
 
 # fix the headers (do during trim-decon)
-# reformat.sh \
-# in=SRR1393722_1.fastq.gz \
-# in2=SRR1393722_2.fastq.gz \
-# out=stdout.fastq \
-#     | head -n 16 \
-#     | sed -e 's/^@\S*\s/@/g' \
+# reformat.sh in=SRR1393722_1.fastq.gz in2=SRR1393722_2.fastq.gz out=stdout.fastq    \
+#     | sed -e 's/^@.\+sra\S\+\s\+/@/g' \
 #     | reformat.sh \
 #         in=stdin.fastq \
 #         int=t \
 #         out=stdout.fastq \
 #         addcolon=t \
 #         trimreaddescription=t \
-#     | sed -e '/^@\S\+:/s/$/N:0:NNNNNN/g'
+#     | sed -e '/^@\S\+\s\+[12]/s/$/N:0:NNNNNN/g'
 
 
  
@@ -257,7 +253,7 @@ rule trim_decon:
         'out=stdout.fastq '
         '2> {log.reheader} '
         '| '
-        'sed -e \'s/^@\S*\s/@/g\' '          # remove SRA from fastq header
+        'sed -e \'s/^@.\+sra\S\+\s\+/@/g\' '          # remove SRA from fastq header
         '| '
         'reformat.sh '
         'in=stdin.fastq '
@@ -267,7 +263,7 @@ rule trim_decon:
         'trimreaddescription=t '
         '2>> {log.reheader} '
         '| '
-        'sed -e \'/^@\S\+:/s/$/N:0:NNNNNN/g\' '      # add second word to fastq header
+        'sed -e \'/^@\S\+\s\+[12]/s/$/N:0:NNNNNN/g\' '      # add second word to fastq header
         '| '
         'bbduk.sh '
         'threads={threads} '
@@ -289,6 +285,18 @@ rule trim_decon:
         'forcetrimmod=5 '
         'stats={output.t_stats} '
         '2> {log.trim} '
+
+
+reformat.sh in=SRR1393722_1.fastq.gz in2=SRR1393722_2.fastq.gz out=stdout.fastq    \
+    | sed -e 's/^@.\+sra\S\+\s\+/@/g' \
+    | reformat.sh \
+        in=stdin.fastq \
+        int=t \
+        out=stdout.fastq \
+        addcolon=t \
+        trimreaddescription=t \
+    | sed -e '/^@\S\+\s\+[12]/s/$/N:0:NNNNNN/g'
+
 
 rule repair:
     input:

@@ -10,5 +10,5 @@ min_depth_cutoff    {dmin}
 local_num_procs     {threads}
 local_max_memory    100
 use_cluster         0
-no_read_validation  1
+no_read_validation  0
 num_prefix_blocks   1
