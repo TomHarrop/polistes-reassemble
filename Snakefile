@@ -95,17 +95,6 @@ mate_pair_libs = {k: name_to_srr[k] for k in name_to_srr.keys()
 standard_libs = {k: name_to_srr[k] for k in name_to_srr.keys()
                  if 'mate' not in k}
 
-# fix the headers (do during trim-decon)
-# reformat.sh in=SRR1393722_1.fastq.gz in2=SRR1393722_2.fastq.gz out=stdout.fastq    \
-#     | sed -e 's/^@.\+sra\S\+\s\+/@/g' \
-#     | reformat.sh \
-#         in=stdin.fastq \
-#         int=t \
-#         out=stdout.fastq \
-#         addcolon=t \
-#         trimreaddescription=t \
-#     | sed -e '/^@\S\+\s\+[12]/s/$/N:0:NNNNNN/g'
- 
 #########
 # RULES #
 #########
@@ -170,9 +159,9 @@ rule meraculous_config:
         my_lib_dict['dmin'] = params.dmin
         my_lib_dict['threads'] = threads
         # which config string are we going to use
-        my_conf_file = (with_mp_config_string
+        my_conf_file = (meraculous_config_with_mp
                         if wildcards.mp == 'with-mp'
-                        else no_mp_config_string)
+                        else meraculous_config_no_mp)
         # read and format the conf string
         with open(my_conf_file, 'rt') as f:
             my_conf_string = ''.join(f.readlines())
@@ -259,13 +248,19 @@ rule trim_decon:
     singularity:
         bbduk_container
     shell:
+        # this includes two really nasty SED commands to remove the SRA info
+        # from the fastq headers and make them meraculous-compatible, e.g.
+        # from:
+        # @SRR1393722.sra.1 HWI-ST330:133:B027FACXX:3:1101:2890:2000 length=100
+        # to:
+        # @HWI-ST330:133:B027FACXX:3:1101:2890:2000 1:N:0:NNNNNN
         'reformat.sh '
         'in={input.r1} '
         'in2={input.r2} '
         'out=stdout.fastq '
         '2> {log.reheader} '
         '| '
-        'sed -e \'s/^@.\+sra\S\+\s\+/@/g\' '          # remove SRA from fastq header
+        'sed -e \'s/^@.\+sra\S\+\s\+/@/g\' '                # remove SRA from fastq header
         '| '
         'reformat.sh '
         'in=stdin.fastq '
