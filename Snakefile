@@ -19,6 +19,11 @@ def meraculous_input_resolver(wildcards):
     # mp libs are always the same
     mp_path = 'output/010_trim-decon/{library}.fq.gz'
     lib_dict = dict.fromkeys(all_libs)
+    # don't return the mp inputs if we're not using mp
+    if wildcards.mp == 'no-mp':
+        my_lib_dict = {k: v for k, v in lib_dict.items()
+                       if 'mate' not in k}
+        lib_dict = my_lib_dict
     # generate paths from keys
     for key in lib_dict:
         if 'standard' in key:
@@ -45,12 +50,16 @@ def trim_resolver(wildcards):
 ###########
 
 run_info_file = 'data/SraRunInfo.csv'
-meraculous_config_file = 'src/meraculous_config.txt'
+meraculous_config_with_mp = 'src/meraculous-config_with-mp.txt'
+meraculous_config_no_mp = 'src/meraculous-config_no-mp.txt'
 
 sra_container = 'shub://TomHarrop/singularity-containers:sra_2.9.2'
 bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
 mer_container = 'shub://TomHarrop/singularity-containers:meraculous_2.2.6'
 
+ks = [35, 65, 95]
+read_sets = ['norm', 'raw']
+diplo_modes = [0, 1]
 
 ########
 # MAIN #
@@ -86,14 +95,6 @@ mate_pair_libs = {k: name_to_srr[k] for k in name_to_srr.keys()
 standard_libs = {k: name_to_srr[k] for k in name_to_srr.keys()
                  if 'mate' not in k}
 
-
-# read the meraculous config
-with open(meraculous_config_file, 'rt') as f:
-    meraculous_config_string = ''.join(f.readlines())
-
-# format using
-# meraculous_config_string.format(**lib_dict)
-
 # fix the headers (do during trim-decon)
 # reformat.sh in=SRR1393722_1.fastq.gz in2=SRR1393722_2.fastq.gz out=stdout.fastq    \
 #     | sed -e 's/^@.\+sra\S\+\s\+/@/g' \
@@ -111,29 +112,35 @@ with open(meraculous_config_file, 'rt') as f:
 
 rule target:
     input:
-        expand(('output/040_meraculous/'
+        # can only use mp libs with k <= 35
+        expand(('output/040_meraculous/with-mp/'
+                '{read_set}_k35_diplo{diplo}/'
+                'meraculous_final_results/final.scaffolds.fa'),
+               read_set=read_sets,
+               diplo=diplo_modes),
+        expand(('output/040_meraculous/no-mp/'
                 '{read_set}_k{k}_diplo{diplo}/'
                 'meraculous_final_results/final.scaffolds.fa'),
-               read_set=['norm', 'raw'],
-               k=[35], # , 61, 91], # have to disable MP libraries for k>35
-               diplo=['0', '1'])
+               read_set=read_sets,
+               k=ks,
+               diplo=diplo_modes)
 
 # assembly rule
 rule meraculous:
     input:
         unpack(meraculous_input_resolver),
-        config = ('output/040_meraculous/'
+        config = ('output/040_meraculous/{mp}/'
                   '{read_set}_k{k}_diplo{diplo}/config.txt')
     output:
-        contigs = ('output/040_meraculous/'
+        contigs = ('output/040_meraculous/{mp}/'
                    '{read_set}_k{k}_diplo{diplo}/'
                    'meraculous_final_results/final.scaffolds.fa'),
     params:
-        outdir = 'output/040_meraculous/{read_set}_k{k}_diplo{diplo}/',
+        outdir = 'output/040_meraculous/{mp}/{read_set}_k{k}_diplo{diplo}/',
     threads:
         multiprocessing.cpu_count()
     log:
-        'output/logs/040_meraculous/{read_set}_k{k}_diplo{diplo}.log'
+        'output/logs/040_meraculous/{mp}_{read_set}_k{k}_diplo{diplo}.log'
     singularity:
         mer_container
     shell:
@@ -147,7 +154,7 @@ rule meraculous_config:
     input:
         unpack(meraculous_input_resolver)
     output:
-        config = ('output/040_meraculous/'
+        config = ('output/040_meraculous/{mp}/'
                   '{read_set}_k{k}_diplo{diplo}/config.txt')
     params:
         dmin = '0'
@@ -162,7 +169,14 @@ rule meraculous_config:
         my_lib_dict['diplo'] = wildcards.diplo
         my_lib_dict['dmin'] = params.dmin
         my_lib_dict['threads'] = threads
-        my_conf = meraculous_config_string.format(**my_lib_dict)
+        # which config string are we going to use
+        my_conf_file = (with_mp_config_string
+                        if wildcards.mp == 'with-mp'
+                        else no_mp_config_string)
+        # read and format the conf string
+        with open(my_conf_file, 'rt') as f:
+            my_conf_string = ''.join(f.readlines())
+        my_conf = my_conf_string.format(**my_lib_dict)
         with open(output.config, 'wt') as f:
             f.write(my_conf)
 

@@ -1,0 +1,14 @@
+lib_seq {Overlapping_insert_standard} OVERLAPPINGINSERTSTANDARD  150    0  100 0 0 1 0 1 0 0 
+lib_seq      {500_bp_insert_standard}       500BPINSERTSTANDARD  500   10  100 0 0 1 1 1 0 0 
+lib_seq         {1kb_standard_insert}         1KBSTANDARDINSERT 1000  100  100 0 0 1 2 1 0 0 
+lib_seq        {3kb_insert_mate_pair}         3KBINSERTMATEPAIR 3000  300   35 0 1 0 3 0 0 0 
+lib_seq        {8kb_insert_mate_pair}         8KBINSERTMATEPAIR 8000  800   35 0 1 0 4 0 0 0 
+genome_size         0.21
+mer_size            {k}
+diploid_mode        {diplo}
+min_depth_cutoff    {dmin}
+local_num_procs     {threads}
+local_max_memory    100
+use_cluster         0
+no_read_validation  1
+num_prefix_blocks   1
