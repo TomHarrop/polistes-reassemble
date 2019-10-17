@@ -370,7 +370,7 @@ rule generic_unzip:
     input:
         '{folder}/{file}.{ext}.gz'
     output:
-        temp('{folder}/{file}.{ext}')
+        touch('{folder}/{file}.{ext}')
     wildcard_constraints:
         ext = 'fastq|fq' # only for fastq
     singularity:
