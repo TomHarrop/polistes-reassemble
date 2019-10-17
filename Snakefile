@@ -13,11 +13,11 @@ def meraculous_input_resolver(wildcards):
     # which readset are we on
     my_readset = wildcards.read_set
     if my_readset == 'norm':
-        std_path = 'output/020_norm/{library}-norm.fq.gz'
+        std_path = 'output/020_norm/{library}-norm.fq'
     elif my_readset == 'raw':
-        std_path = 'output/010_trim-decon/{library}.fq.gz'
+        std_path = 'output/010_trim-decon/{library}.fq'
     # mp libs are always the same
-    mp_path = 'output/010_trim-decon/{library}.fq.gz'
+    mp_path = 'output/010_trim-decon/{library}.fq'
     lib_dict = dict.fromkeys(all_libs)
     # don't return the mp inputs if we're not using mp
     if wildcards.mp == 'no-mp':
@@ -53,9 +53,10 @@ run_info_file = 'data/SraRunInfo.csv'
 meraculous_config_with_mp = 'src/meraculous-config_with-mp.txt'
 meraculous_config_no_mp = 'src/meraculous-config_no-mp.txt'
 
-sra_container = 'shub://TomHarrop/singularity-containers:sra_2.9.2'
 bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
 mer_container = 'shub://TomHarrop/singularity-containers:meraculous_2.2.6'
+pigz_container = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
+sra_container = 'shub://TomHarrop/singularity-containers:sra_2.9.2'
 
 ks = [35, 65, 95]
 read_sets = ['norm', 'raw']
@@ -363,3 +364,20 @@ rule download_sra:
         '-O {output} '
         '{params.url} '
         '&> {log}'
+
+# generic unzip rule
+rule generic_unzip:
+    input:
+        '{folder}/{file}.{ext}.gz'
+    output:
+        temp('{folder}/{file}.{ext}')
+    wildcard_constraints:
+        ext = 'fastq|fq' # only for fastq
+    singularity:
+        pigz_container
+    shell:
+        'pigz '
+        '--decompress '
+        '--stdout '
+        '{input} '
+        '> {output}'
