@@ -68,7 +68,7 @@ busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
 mer_container = 'shub://TomHarrop/singularity-containers:meraculous_2.2.6'
 pigz_container = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
 sra_container = 'shub://TomHarrop/singularity-containers:sra_2.9.2'
-r_container = 'shub://TomHarrop/singularity-containers:r_3.6.0'
+r_container = 'shub://TomHarrop/singularity-containers:bioconductor_3.9'
 
 ks = [35, 65]
 read_sets = ['norm', 'raw']
