@@ -3,6 +3,7 @@
 import multiprocessing
 import pandas
 import pathlib2
+import tempfile
 
 
 #############
@@ -45,6 +46,15 @@ def trim_resolver(wildcards):
         'r2': f'output/fastq_repaired/{my_srr}_2.fastq.gz'})
 
 
+def find_completed_assemblies():
+    assembly_path = ('output/040_meraculous/{mp}/'
+                     '{read_set}_k{k}_diplo{diplo}/'
+                     'meraculous_final_results/final.scaffolds.fa')
+    my_wildcards = snakemake.io.glob_wildcards(assembly_path)
+    my_wc_dict = my_wildcards._asdict()
+    return(my_wc_dict)
+
+
 ###########
 # GLOBALS #
 ###########
@@ -54,11 +64,13 @@ meraculous_config_with_mp = 'src/meraculous-config_with-mp.txt'
 meraculous_config_no_mp = 'src/meraculous-config_no-mp.txt'
 
 bbduk_container = 'shub://TomHarrop/singularity-containers:bbmap_38.00'
+busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
 mer_container = 'shub://TomHarrop/singularity-containers:meraculous_2.2.6'
 pigz_container = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
 sra_container = 'shub://TomHarrop/singularity-containers:sra_2.9.2'
+r_container = 'shub://TomHarrop/singularity-containers:r_3.6.0'
 
-ks = [35, 65, 95]
+ks = [35, 65]
 read_sets = ['norm', 'raw']
 diplo_modes = [0, 1]
 
@@ -96,6 +108,9 @@ mate_pair_libs = {k: name_to_srr[k] for k in name_to_srr.keys()
 standard_libs = {k: name_to_srr[k] for k in name_to_srr.keys()
                  if 'mate' not in k}
 
+# find the completed assemblies once, at runtime
+completed_assembly_dict = find_completed_assemblies()
+
 #########
 # RULES #
 #########
@@ -114,6 +129,104 @@ rule target:
                read_set=read_sets,
                k=ks,
                diplo=diplo_modes)
+
+# only run stats jobs on demand
+rule plot_assembly_results:
+    input:
+        'output/070_summary-plots/assembly_stats.pdf',
+        'output/070_summary-plots/busco.pdf'
+
+rule plot_assembly_stats:
+    input:
+        stats_files = expand(('output/050_stats/{mp}/'
+                              '{read_set}_k{k}_diplo{diplo}/stats.tsv'),
+                             zip,
+                             **completed_assembly_dict),
+    output:
+        plot = 'output/070_summary-plots/assembly_stats.pdf'
+    log:
+        'output/logs/070_summary-plots/plot_assembly_stats.log'
+    singularity:
+        r_container
+    script:
+        'src/plot_assembly_stats.R'
+
+
+rule plot_busco_results:
+    input:
+        busco_files = expand(('output/060_busco/{mp}/{read_set}/k{k}/diplo{diplo}/'
+                              'run_busco/full_table_busco.tsv'),
+                             zip,
+                             **completed_assembly_dict)
+    output:
+        plot = 'output/070_summary-plots/busco.pdf'
+    log:
+        'output/logs/070_summary-plots/plot_busco_results.log'
+    singularity:
+        r_container
+    script:
+        'src/plot_busco_results.R'
+
+# busco
+rule busco:
+    input:
+        fasta = ('output/040_meraculous/{mp}/'
+                 '{read_set}_k{k}_diplo{diplo}/'
+                 'meraculous_final_results/final.scaffolds.fa'),
+        lineage = 'data/hymenoptera_odb9'
+    output:
+        ('output/060_busco/{mp}/{read_set}/k{k}/diplo{diplo}/'
+         'run_busco/full_table_busco.tsv')
+    log:
+        str(pathlib2.Path(resolve_path('output/logs/'),
+                          '060_busco/{mp}_{read_set}_k{k}_diplo{diplo}.log'))
+    params:
+        wd = 'output/060_busco/{mp}/{read_set}/k{k}/diplo{diplo}',
+        name = 'busco',
+        fasta = lambda wildcards, input: resolve_path(input.fasta),
+        lineage = lambda wildcards, input: resolve_path(input.lineage),
+        tmpdir = tempfile.mkdtemp()
+    threads:
+        multiprocessing.cpu_count()
+    singularity:
+        busco_container
+    shell:
+        'cd {params.wd} || exit 1 ; '
+        'run_BUSCO.py '
+        '--force '
+        '--tmp_path {params.tmpdir} '
+        '--in {params.fasta} '
+        '--out {params.name} '
+        '--lineage {params.lineage} '
+        '--cpu {threads} '
+        '--species honeybee1 '
+        '--mode genome '
+        '&> {log}'
+
+
+# assembly stats:
+rule assembly_stats:
+    input:
+        contigs = ('output/040_meraculous/{mp}/'
+                   '{read_set}_k{k}_diplo{diplo}/'
+                   'meraculous_final_results/final.scaffolds.fa')
+    output:
+        stats = ('output/050_stats/{mp}/{read_set}_k{k}_diplo{diplo}/'
+                 'stats.tsv')
+    log:
+        'output/logs/050_stats/{mp}_{read_set}_k{k}_diplo{diplo}.log'
+    threads:
+        1
+    singularity:
+        bbduk_container
+    shell:
+        'stats.sh '
+        'in={input} '
+        'minscaf=1000 '
+        'format=3 '
+        'threads={threads} '
+        '> {output} '
+        '2> {log}'
 
 # assembly rule
 rule meraculous:
@@ -138,7 +251,8 @@ rule meraculous:
         '-dir {params.outdir} '
         '-config {input.config} '
         '-cleanup_level 2 '
-        '&> {log}'
+        '&> {log} '
+        '|| touch {output.contigs}'     # Nasty! Is there a better way?
 
 rule meraculous_config:
     input:
