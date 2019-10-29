@@ -251,8 +251,7 @@ rule meraculous:
         '-dir {params.outdir} '
         '-config {input.config} '
         '-cleanup_level 2 '
-        '&> {log} '
-        '|| touch {output.contigs}'     # Nasty! Is there a better way?
+        '&> {log}'
 
 rule meraculous_config:
     input:
